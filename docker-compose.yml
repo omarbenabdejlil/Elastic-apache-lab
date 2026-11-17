@@ -1,0 +1,140 @@
+version: '3.8'
+
+services:
+  setup:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${STACK_VERSION}
+    volumes:
+      - certs:/usr/share/elasticsearch/config/certs
+    user: "0"
+    command: >
+      bash -c '
+        if [ ! -f config/certs/ca.zip ]; then
+          echo "Création de l'\''autorité de certification (CA)...";
+          bin/elasticsearch-certutil ca --silent --pem -out config/certs/ca.zip;
+          unzip config/certs/ca.zip -d config/certs;
+        fi;
+        if [ ! -f config/certs/certs.zip ]; then
+          echo "Création des certificats pour les conteneurs...";
+          echo -ne "instances:\n  - name: elasticsearch\n    dns:\n      - elasticsearch\n      - localhost\n    ip:\n      - 127.0.0.1\n" > config/certs/instances.yml;
+          bin/elasticsearch-certutil cert --silent --pem -out config/certs/certs.zip --in config/certs/instances.yml --ca-cert config/certs/ca/ca.crt --ca-key config/certs/ca/ca.key;
+          unzip config/certs/certs.zip -d config/certs;
+        fi;
+        echo "Ajustement des permissions des fichiers de certificats...";
+        chown -R 1000:0 config/certs;
+        find config/certs -type d -exec chmod 750 {} \;;
+        find config/certs -type f -exec chmod 640 {} \;;
+        echo "Certificats prêts !";
+      '
+
+  elasticsearch:
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    image: docker.elastic.co/elasticsearch/elasticsearch:${STACK_VERSION}
+    volumes:
+      - certs:/usr/share/elasticsearch/config/certs
+      - esdata:/usr/share/elasticsearch/data
+    ports:
+      - 9200:9200
+    environment:
+      - node.name=elasticsearch
+      - cluster.name=elastic-lab-cluster
+      - discovery.type=single-node
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+      - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=true
+      - xpack.security.http.ssl.key=certs/elasticsearch/elasticsearch.key
+      - xpack.security.http.ssl.certificate=certs/elasticsearch/elasticsearch.crt
+      - xpack.security.http.ssl.certificate_authorities=certs/ca/ca.crt
+      - xpack.security.transport.ssl.enabled=true
+      - xpack.security.transport.ssl.key=certs/elasticsearch/elasticsearch.key
+      - xpack.security.transport.ssl.certificate=certs/elasticsearch/elasticsearch.crt
+      - xpack.security.transport.ssl.certificate_authorities=certs/ca/ca.crt
+      - xpack.security.transport.ssl.verification_mode=certificate
+      - xpack.license.self_generated.type=trial
+      - ES_JAVA_OPTS=${ES_JAVA_OPTS}
+    mem_limit: 5g
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials'"
+      interval: 10s
+      timeout: 10s
+      retries: 120
+
+  kibana:
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    image: docker.elastic.co/kibana/kibana:${STACK_VERSION}
+    volumes:
+      - certs:/usr/share/kibana/config/certs
+      - kibanadata:/usr/share/kibana/data
+    ports:
+      - 5601:5601
+    environment:
+      - SERVERNAME=kibana
+      - ELASTICSEARCH_HOSTS=https://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=kibana_system
+      - ELASTICSEARCH_PASSWORD=${KIBANA_PASSWORD}
+      - ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES=/usr/share/kibana/config/certs/ca/ca.crt
+      - XPACK_SECURITY_ENCRYPTIONKEY=a_very_long_random_string_of_at_least_32_characters_kibana_key
+      - XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY=a_very_long_random_string_of_at_least_32_characters_kibana_key
+      - XPACK_REPORTING_ENCRYPTIONKEY=a_very_long_random_string_of_at_least_32_characters_kibana_key
+    mem_limit: 1.5g
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -I http://localhost:5601 | grep -q 'HTTP/1.1 302 Found'"]
+      interval: 10s
+      timeout: 10s
+      retries: 50
+
+  apache-web:
+    image: httpd:2.4-alpine
+    ports:
+      - 8080:80
+    volumes:
+      - apache_logs:/usr/local/apache2/logs
+    command: >
+      sh -c '
+        sed -i -E "s|CustomLog .* common|CustomLog logs/access_log combined|g" conf/httpd.conf
+        sed -i -E "s|ErrorLog .*|ErrorLog logs/error_log|g" conf/httpd.conf
+        httpd-foreground
+      '
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 80"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  elastic-agent:
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    image: docker.elastic.co/beats/elastic-agent:${STACK_VERSION}
+    volumes:
+      - certs:/etc/certs:ro
+      - apache_logs:/var/log/apache2:ro
+    environment:
+      - FLEET_ENROLL=1
+      - FLEET_ENROLLMENT_TOKEN=my-enrollment-token-placeholder
+      - FLEET_URL=https://elasticsearch:9200
+      - ES_USERNAME=elastic
+      - ES_PASSWORD=${ELASTIC_PASSWORD}
+      - ES_CACERT=/etc/certs/ca/ca.crt
+    # L'agent est démarré en mode autonome (standalone) pour ce lab
+    entrypoint: >
+      bash -c '
+        echo "Attente d'\''Elasticsearch..."
+        sleep 15;
+        /usr/share/elastic-agent/elastic-agent container
+      '
+
+volumes:
+  certs:
+    driver: local
+  esdata:
+    driver: local
+  kibanadata:
+    driver: local
+  apache_logs:
+    driver: local

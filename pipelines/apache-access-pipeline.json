@@ -1,0 +1,89 @@
+{
+  "description": "Pipeline de traitement des logs d'accès Apache (Conformité ECS, GeoIP & User-Agent)",
+  "processors": [
+    {
+      "set": {
+        "field": "event.ingested",
+        "value": "{{_ingest.timestamp}}"
+      }
+    },
+    {
+      "rename": {
+        "field": "message",
+        "target_field": "event.original",
+        "ignore_missing": true
+      }
+    },
+    {
+      "grok": {
+        "field": "event.original",
+        "patterns": [
+          "^%{IPORHOST:temp.client_ip} %{USER:user.id} %{USER:user.name} \\[%{HTTPDATE:temp.time}\\] \"(?:%{WORD:http.request.method} %{DATA:url.original}(?: HTTP/%{NUMBER:http.version})?|%{DATA:temp.invalid_request})\" %{NUMBER:http.response.status_code:long} (?:%{NUMBER:http.response.body.bytes:long}|-)(?: \"%{DATA:http.request.referrer}\")?(?: \"%{DATA:user_agent.original}\")?",
+          "^%{IPORHOST:temp.client_ip} %{USER:user.id} %{USER:user.name} \\[%{HTTPDATE:temp.time}\\] \"-\" %{NUMBER:http.response.status_code:long} (?:%{NUMBER:http.response.body.bytes:long}|-)"
+        ],
+        "ignore_missing": true
+      }
+    },
+    {
+      "set": {
+        "field": "message",
+        "value": "{{url.original}}",
+        "if": "ctx.url?.original != null"
+      }
+    },
+    {
+      "date": {
+        "field": "temp.time",
+        "target_field": "@timestamp",
+        "formats": [
+          "dd/MMM/yyyy:HH:mm:ss Z"
+        ],
+        "ignore_failure": true
+      }
+    },
+    {
+      "set": {
+        "field": "source.address",
+        "value": "{{temp.client_ip}}",
+        "if": "ctx.temp?.client_ip != null"
+      }
+    },
+    {
+      "set": {
+        "field": "source.ip",
+        "value": "{{temp.client_ip}}",
+        "if": "ctx.temp?.client_ip != null"
+      }
+    },
+    {
+      "user_agent": {
+        "field": "user_agent.original",
+        "target_field": "user_agent",
+        "ignore_missing": true
+      }
+    },
+    {
+      "geoip": {
+        "field": "source.ip",
+        "target_field": "source.geo",
+        "ignore_missing": true
+      }
+    },
+    {
+      "remove": {
+        "field": [
+          "temp"
+        ],
+        "ignore_missing": true
+      }
+    }
+  ],
+  "on_failure": [
+    {
+      "set": {
+        "field": "error.message",
+        "value": "{{ _ingest.on_failure_message }}"
+      }
+    }
+  ]
+}

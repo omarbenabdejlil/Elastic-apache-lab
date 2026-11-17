@@ -1,0 +1,17 @@
+{
+  "description": "Routeur de logs Apache vers les pipelines dédiés selon la typologie",
+  "processors": [
+    {
+      "pipeline": {
+        "if": "ctx.log?.file?.path != null && ctx.log.file.path.contains('access') || (ctx.data_stream?.dataset != null && ctx.data_stream.dataset == 'apache.access')",
+        "name": "apache-access-pipeline"
+      }
+    },
+    {
+      "pipeline": {
+        "if": "ctx.log?.file?.path != null && ctx.log.file.path.contains('error') || (ctx.data_stream?.dataset != null && ctx.data_stream.dataset == 'apache.error')",
+        "name": "apache-error-pipeline"
+      }
+    }
+  ]
+}

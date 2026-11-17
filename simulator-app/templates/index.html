@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Elastic Security - Simulateur d'Attaques & ML</title>
+  <!-- W3.CSS depuis W3Schools -->
+  <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+  <link rel="stylesheet" href="https://www.w3schools.com/lib/w3-theme-dark-grey.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+  <style>
+    body {
+      font-family: "Segoe UI", Arial, sans-serif;
+      background-color: #121824;
+      color: #e6edf3;
+    }
+    .card-box {
+      background-color: #1b2434;
+      border: 1px solid #2d3748;
+      border-radius: 8px;
+    }
+    .kpi-box {
+      background-color: #1a2332;
+      border: 1px solid #2d3748;
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .stream-container {
+      height: 480px;
+      overflow-y: auto;
+      background-color: #0d1117;
+      border: 1px solid #2d3748;
+      border-radius: 6px;
+      padding: 10px;
+      font-family: "Courier New", Courier, monospace;
+      font-size: 12px;
+    }
+    .event-card {
+      margin-bottom: 8px;
+      padding: 8px 12px;
+      border-radius: 4px;
+      border-left: 4px solid #2196F3;
+      background-color: #161b22;
+    }
+    .event-nmap { border-left-color: #f44336; }
+    .event-brute { border-left-color: #ff9800; }
+    .event-sqli { border-left-color: #9c27b0; }
+    .event-xss { border-left-color: #00bcd4; }
+    .event-normal { border-left-color: #4CAF50; }
+    .badge {
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: bold;
+    }
+    .btn-action {
+      border-radius: 6px;
+      font-weight: bold;
+      transition: 0.2s;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation Bar (Style W3Schools) -->
+  <div class="w3-bar w3-black w3-border-bottom w3-border-dark-grey w3-padding">
+    <div class="w3-left">
+      <span class="w3-bar-item w3-text-blue w3-large"><i class="fa fa-shield"></i> <b>Elastic Security Simulator</b></span>
+      <span class="w3-bar-item w3-small w3-text-grey">Ingest Pipelines ECS • Détection d'Anomalies Machine Learning</span>
+    </div>
+    <div class="w3-right">
+      <a href="/docs" target="_blank" class="w3-bar-item w3-button w3-dark-grey w3-round w3-small w3-margin-right"><i class="fa fa-book"></i> API Swagger</a>
+      <a href="http://localhost:5601" target="_blank" class="w3-bar-item w3-button w3-blue w3-round w3-small"><i class="fa fa-dashboard"></i> Kibana</a>
+    </div>
+  </div>
+
+  <div class="w3-content w3-padding-16" style="max-width:1300px">
+
+    <!-- KPI / Status Row (Blocs W3.CSS) -->
+    <div class="w3-row-padding w3-margin-bottom">
+      <div class="w3-quarter">
+        <div class="kpi-box w3-border-left w3-border-green" style="border-left-width: 5px !important;">
+          <div class="w3-text-grey w3-small">ÉTAT DU CLUSTER ES</div>
+          <div class="w3-xlarge w3-text-green w3-bold" id="stat-es-status">Chargement...</div>
+          <div class="w3-tiny w3-text-grey w3-margin-top"><i class="fa fa-circle w3-text-green"></i> Elasticsearch 8.15.3 (Trial)</div>
+        </div>
+      </div>
+
+      <div class="w3-quarter">
+        <div class="kpi-box w3-border-left w3-border-blue" style="border-left-width: 5px !important;">
+          <div class="w3-text-grey w3-small">DOCUMENTS INDEXÉS</div>
+          <div class="w3-xlarge w3-text-blue w3-bold" id="stat-docs-count">0</div>
+          <div class="w3-tiny w3-text-grey w3-margin-top"><i class="fa fa-database"></i> Index: <code>logs-apache*</code></div>
+        </div>
+      </div>
+
+      <div class="w3-quarter">
+        <div class="kpi-box w3-border-left w3-border-purple" style="border-left-width: 5px !important;">
+          <div class="w3-text-grey w3-small">JOB MACHINE LEARNING</div>
+          <div class="w3-xlarge w3-text-purple w3-bold" id="stat-ml-status">opened</div>
+          <div class="w3-tiny w3-text-grey w3-margin-top" id="stat-ml-id">apache-traffic-anomaly</div>
+        </div>
+      </div>
+
+      <div class="w3-quarter">
+        <div class="kpi-box w3-border-left w3-border-amber" style="border-left-width: 5px !important;">
+          <div class="w3-text-grey w3-small">ALERTES DÉTECTÉES</div>
+          <div class="w3-xlarge w3-text-amber w3-bold" id="stat-alerts-count">0</div>
+          <div class="w3-tiny w3-text-grey w3-margin-top"><i class="fa fa-exclamation-triangle"></i> Anomalies de trafic calculées</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Section: Contrôle d'Attaque (Gauche) + Flux en Direct (Droite) -->
+    <div class="w3-row-padding w3-margin-bottom">
+
+      <!-- Colonne Gauche : Boutons d'Attaques & Simulation -->
+      <div class="w3-col l8 m12">
+        <div class="w3-container card-box w3-padding">
+          <div class="w3-bar w3-border-bottom w3-border-dark-grey w3-padding-small">
+            <span class="w3-bar-item w3-medium w3-bold w3-text-white"><i class="fa fa-crosshairs w3-text-red"></i> Simulateur d'Attaques en Temps Réel</span>
+            <div class="w3-right w3-small w3-padding-small">
+              <label class="w3-text-grey">Nombre de requêtes : </label>
+              <select id="attack-intensity" class="w3-select w3-dark-grey w3-border w3-border-dark-grey w3-round" style="width:160px; display:inline-block; padding:3px 6px;">
+                <option value="20">20 requêtes</option>
+                <option value="60" selected>60 requêtes (Standard)</option>
+                <option value="150">150 requêtes (Massif)</option>
+              </select>
+            </div>
+          </div>
+
+          <p class="w3-small w3-text-grey w3-margin-top">
+            Cliquez sur un bloc pour déclencher l'attaque vers le pipeline d'ingestion Elasticsearch et recalculer les anomalies ML en direct :
+          </p>
+
+          <!-- Grille de blocs d'attaques -->
+          <div class="w3-row-padding">
+
+            <!-- 1. Trafic Normal -->
+            <div class="w3-half w3-margin-bottom">
+              <div class="w3-container w3-card w3-padding" style="background:#131c2a; border: 1px solid #233044; border-radius:6px;">
+                <div class="w3-tag w3-green w3-round badge">LÉGITIME</div>
+                <h4 class="w3-text-white" style="margin:8px 0 4px 0;"><b>Trafic Normal (Baseline)</b></h4>
+                <p class="w3-small w3-text-grey" style="min-height:36px;">Utilisateurs réels navigant sur des pages valides avec codes HTTP 200 OK.</p>
+                <button onclick="triggerAction('/api/simulate/traffic/normal')" class="w3-button w3-block w3-green w3-hover-light-green btn-action w3-small">
+                  <i class="fa fa-play"></i> Injecter Trafic Normal
+                </button>
+              </div>
+            </div>
+
+            <!-- 2. Scan Nmap -->
+            <div class="w3-half w3-margin-bottom">
+              <div class="w3-container w3-card w3-padding" style="background:#131c2a; border: 1px solid #233044; border-radius:6px;">
+                <div class="w3-tag w3-red w3-round badge">RECONNAISSANCE</div>
+                <h4 class="w3-text-white" style="margin:8px 0 4px 0;"><b>Scan Nmap (URL Fuzzing)</b></h4>
+                <p class="w3-small w3-text-grey" style="min-height:36px;">Scan d'URLs sensibles (.env, wp-login, backup) avec User-Agent Nmap (HTTP 404).</p>
+                <button onclick="triggerAction('/api/simulate/attack/nmap')" class="w3-button w3-block w3-red w3-hover-opacity btn-action w3-small">
+                  <i class="fa fa-bolt"></i> Lancer Scan Nmap
+                </button>
+              </div>
+            </div>
+
+            <!-- 3. Brute Force -->
+            <div class="w3-half w3-margin-bottom">
+              <div class="w3-container w3-card w3-padding" style="background:#131c2a; border: 1px solid #233044; border-radius:6px;">
+                <div class="w3-tag w3-amber w3-round badge">AUTHENTIFICATION</div>
+                <h4 class="w3-text-white" style="margin:8px 0 4px 0;"><b>Brute-Force (Hydra)</b></h4>
+                <p class="w3-small w3-text-grey" style="min-height:36px;">Tentatives répétées de mots de passe échouées sur <code>/login</code> (HTTP 401).</p>
+                <button onclick="triggerAction('/api/simulate/attack/bruteforce')" class="w3-button w3-block w3-amber w3-hover-opacity btn-action w3-small">
+                  <i class="fa fa-lock"></i> Lancer Brute-Force
+                </button>
+              </div>
+            </div>
+
+            <!-- 4. SQL Injection -->
+            <div class="w3-half w3-margin-bottom">
+              <div class="w3-container w3-card w3-padding" style="background:#131c2a; border: 1px solid #233044; border-radius:6px;">
+                <div class="w3-tag w3-purple w3-round badge">EXPLOITATION</div>
+                <h4 class="w3-text-white" style="margin:8px 0 4px 0;"><b>Injection SQL (SQLi)</b></h4>
+                <p class="w3-small w3-text-grey" style="min-height:36px;">Payloads SQL (UNION SELECT, OR 1=1) provoquant des erreurs HTTP 500.</p>
+                <button onclick="triggerAction('/api/simulate/attack/sqli')" class="w3-button w3-block w3-purple w3-hover-opacity btn-action w3-small">
+                  <i class="fa fa-database"></i> Lancer SQL Injection
+                </button>
+              </div>
+            </div>
+
+            <!-- 5. Cross-Site Scripting (XSS) -->
+            <div class="w3-col m12 w3-margin-bottom">
+              <div class="w3-container w3-card w3-padding" style="background:#131c2a; border: 1px solid #233044; border-radius:6px;">
+                <div class="w3-tag w3-cyan w3-text-black w3-round badge">CLIENT-SIDE</div>
+                <h4 class="w3-text-white" style="margin:8px 0 4px 0;"><b>Cross-Site Scripting (XSS)</b></h4>
+                <p class="w3-small w3-text-grey">Injections de balises <code>&lt;script&gt;</code> et code JavaScript malveillant (HTTP 400).</p>
+                <button onclick="triggerAction('/api/simulate/attack/xss')" class="w3-button w3-block w3-cyan w3-text-black w3-hover-opacity btn-action w3-small">
+                  <i class="fa fa-code"></i> Injecter Payloads XSS
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- Colonne Droite : Flux d'Événements en Direct -->
+      <div class="w3-col l4 m12">
+        <div class="w3-container card-box w3-padding">
+          <div class="w3-bar w3-border-bottom w3-border-dark-grey w3-padding-small">
+            <span class="w3-bar-item w3-medium w3-bold w3-text-white"><i class="fa fa-terminal w3-text-amber"></i> Flux des Logs en Direct</span>
+            <span class="w3-bar-item w3-right w3-tag w3-dark-grey w3-round w3-tiny" id="live-indicator">● Prêt</span>
+          </div>
+          <div id="events-stream" class="stream-container w3-margin-top">
+            <div class="w3-center w3-text-grey" style="padding-top:160px;">En attente de déclenchement d'actions...</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Section Basse : Tableau des Anomalies Machine Learning (W3-Table) -->
+    <div class="w3-container card-box w3-padding w3-margin-bottom">
+      <div class="w3-bar w3-border-bottom w3-border-dark-grey w3-padding-small">
+        <span class="w3-bar-item w3-medium w3-bold w3-text-white"><i class="fa fa-bell w3-text-red"></i> Alertes Détectées par le Machine Learning Elastic</span>
+        <button onclick="loadAlerts()" class="w3-bar-item w3-right w3-button w3-dark-grey w3-round w3-small"><i class="fa fa-refresh"></i> Actualiser</button>
+      </div>
+
+      <div class="w3-responsive w3-margin-top">
+        <table class="w3-table w3-striped w3-bordered w3-border w3-border-dark-grey w3-hoverable w3-small">
+          <thead>
+            <tr class="w3-dark-grey">
+              <th>Horodatage (UTC)</th>
+              <th>Score d'Anomalie</th>
+              <th>Détecteur ML</th>
+              <th>Valeur Observée (Actual)</th>
+              <th>Valeur Attendue (Typical)</th>
+              <th>Influencers (IP Attaquante / User-Agent)</th>
+            </tr>
+          </thead>
+          <tbody id="alerts-table-body">
+            <tr>
+              <td colspan="6" class="w3-center w3-text-grey w3-padding-16">Chargement des alertes ML...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
